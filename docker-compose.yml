@@ -1,0 +1,35 @@
+services:
+  booktrack:
+    build: .
+    image: booktrack-server:latest
+    container_name: booktrack
+    restart: unless-stopped
+
+    env_file: .env
+
+    volumes:
+      # Volumen con nombre y no una carpeta del host: el proceso corre como
+      # usuario `node`, y una carpeta creada por Docker en el host pertenecería
+      # a root, así que el contenedor no podría escribir en ella.
+      - booktrack_data:/data
+
+    ports:
+      # Solo escucha en localhost: quien da el acceso desde fuera es el túnel
+      # de Cloudflare, no una redirección de puertos del router.
+      - "127.0.0.1:8080:8080"
+
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  booktrack_data:

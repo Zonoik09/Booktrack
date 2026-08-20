@@ -1,0 +1,67 @@
+# Versión para pegar en Portainer (Stacks -> Add stack -> Web editor).
+#
+# Se diferencia del docker-compose.yml normal en una cosa: usa `image:` en vez
+# de `build:`. El editor web de Portainer no tiene el código fuente delante, así
+# que no puede construir la imagen; hay que construirla antes en el servidor:
+#
+#   docker build -t booktrack-server:latest .
+#
+# Las variables de entorno NO van aquí. Se rellenan en el apartado
+# "Environment variables" de la propia pantalla de Portainer, que es donde
+# deben estar: si las escribes en este fichero, la contraseña de firma queda
+# a la vista de cualquiera que abra el stack.
+
+services:
+  booktrack:
+    image: booktrack-server:latest
+    container_name: booktrack
+    restart: unless-stopped
+
+    environment:
+      # Rellenar en Portainer, en "Environment variables".
+      JWT_SECRET: ${JWT_SECRET}
+      INVITE_CODE: ${INVITE_CODE}
+      REGISTRATION_ENABLED: ${REGISTRATION_ENABLED:-1}
+      MIN_PASSWORD_LENGTH: ${MIN_PASSWORD_LENGTH:-8}
+      ACCESS_TOKEN_TTL_MINUTES: ${ACCESS_TOKEN_TTL_MINUTES:-60}
+      REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-60}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+
+    volumes:
+      # Volumen con nombre: el proceso corre como usuario `node` y una carpeta
+      # del host creada por Docker sería de root, así que no podría escribir.
+      # Además Portainer lo gestiona desde su apartado "Volumes".
+      - booktrack_data:/data
+
+    ports:
+      # Solo en localhost. Quien lo publica hacia fuera es el túnel de
+      # Cloudflare, no una redirección de puertos del router.
+      #
+      # Si cloudflared corre como contenedor en vez de en el host, quita estas
+      # dos líneas, descomenta el bloque `networks` de abajo y apunta el túnel a
+      # http://booktrack:8080
+      - "127.0.0.1:8080:8080"
+
+    # networks:
+    #   - cloudflared
+
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8080/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  booktrack_data:
+
+# networks:
+#   cloudflared:
+#     external: true
+#     name: <el nombre real de la red donde corre cloudflared>
